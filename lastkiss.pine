@@ -1,0 +1,68 @@
+//@version=6
+strategy("Lastkiss Final Precision Fixed [v6]", overlay=true, initial_capital=100000, default_qty_type=strategy.percent_of_equity, default_qty_value=5)
+
+// --- INSTITUTIONAL INPUTS ---
+volMult      = input.float(2.0, "Volume Spike Multiplier", tooltip="Threshold for revealing institutional intent (The Truth candle)")
+riskPerTrade = input.float(15.0, "Position Stop Loss %", tooltip="Position risk; 5% capital * 15% SL = 0.75% total account risk")
+target1      = input.float(9.0, "First Harvest %", group="Targets", tooltip="Initial bonus to lock in gains early")
+target2      = input.float(17.0, "Run Time Target %", group="Targets", tooltip="Point to move stop to breakeven (House Money)")
+target3      = input.float(28.0, "High Hanging Fruit %", group="Targets", tooltip="Historical major reversal target")
+
+// --- VOLUME & CVD ENGINE ---
+// "Candles lie, volume does not" - identifying the Control candle [2, 3]
+avgVol = ta.sma(volume, 20)
+isHighVol = volume > (avgVol * volMult)
+
+// CVD Approximation for spotting 'Shenanigans' and distribution [4, 5]
+var float cvd = 0.0
+cvd := cvd + (close > open ? volume : -volume)
+cvdMA = ta.sma(cvd, 10)
+bearishDivergence = ta.rising(close, 3) and ta.falling(cvd, 3) // Price up, Delta flat/down [6]
+
+// --- CONTROL LEVEL LOGIC ---
+// Numerical precision via hl2 (median) of the high-volume Truth candle [3, 7]
+var float bearLedger = na // Resistance
+var float bullLedger = na // Support
+
+if isHighVol
+    if close < open
+        bearLedger := high
+    else
+        bullLedger := low
+
+// --- WAIT & STRIKE RETRACEMENT MODEL ---
+// "Wait for a breakout... then buy the retracement" [8, 9]
+var bool breakoutConfirmed = false
+var float strikeZone = na
+
+if ta.crossover(close, bearLedger) and isHighVol
+    breakoutConfirmed := true
+    strikeZone := bearLedger
+
+// Entry Trigger: Price retests the reclaimed ledger while staying above support [10]
+validStrike = breakoutConfirmed and ta.crossunder(low, strikeZone * 1.005) and close > strikeZone
+
+// --- EXECUTION & RISK MANAGEMENT ---
+// Longevity focus: survive if wrong, capitalize if right [11, 12]
+if validStrike and not bearishDivergence
+    strategy.entry("Strike", strategy.long, comment="Run Time")
+    breakoutConfirmed := false
+
+// Invalidation Rule: "No hope, just sell" if Bullish Ledger support is lost [10, 13]
+if strategy.position_size > 0 and ta.crossunder(close, bullLedger)
+    strategy.close("Strike", comment="No Hope Exit")
+
+// Tiered "Pay Yourself" Protocol [10, 14]
+slPrice = strategy.position_avg_price * (1 - riskPerTrade/100)
+strategy.exit("Harvest 1", "Strike", qty_percent=33, limit=strategy.position_avg_price * (1 + target1/100), stop=slPrice, comment_profit="9% Bonus", comment_loss="Fatal Damage")
+strategy.exit("Harvest 2", "Strike", qty_percent=33, limit=strategy.position_avg_price * (1 + target2/100), stop=strategy.position_avg_price, comment_profit="17% House Money")
+strategy.exit("Final Run", "Strike", limit=strategy.position_avg_price * (1 + target3/100), trail_points=close * 0.05, comment_profit="Big Bank")
+
+// --- VISUAL SCENARIO MAPPING ---
+plot(bearLedger, "Bearish Ledger", color=color.new(color.red, 50), style=plot.style_linebr, linewidth=2)
+plot(bullLedger, "Bullish Ledger", color=color.new(color.green, 50), style=plot.style_linebr, linewidth=2)
+plot(strikeZone, "Retrace Target", color=breakoutConfirmed ? color.yellow : color.new(color.white, 100), style=plot.style_linebr)
+
+plotshape(isHighVol and bearishDivergence, "Gimmick/Lie", shape.xcross, location.abovebar, color.orange, text="LIE")
+// FIXED: Changed color.cyan to color.aqua
+plotshape(validStrike, "Strike Entry", shape.triangleup, location.belowbar, color.aqua, size=size.normal, text="STRIKE")
