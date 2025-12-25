@@ -54,9 +54,7 @@ if strategy.position_size > 0 and ta.crossunder(close, bullLedger)
 
 // Tiered "Pay Yourself" Protocol [10, 14]
 slPrice = strategy.position_avg_price * (1 - riskPerTrade/100)
-strategy.exit("Harvest 1", "Strike", qty_percent=33, limit=strategy.position_avg_price * (1 + target1/100), stop=slPrice, comment_profit="9% Bonus", comment_loss="Fatal Damage")
-strategy.exit("Harvest 2", "Strike", qty_percent=33, limit=strategy.position_avg_price * (1 + target2/100), stop=strategy.position_avg_price, comment_profit="17% House Money")
-strategy.exit("Final Run", "Strike", limit=strategy.position_avg_price * (1 + target3/100), trail_points=close * 0.05, comment_profit="Big Bank")
+strategy.exit("Take Profit", "Strike", limit=strategy.position_avg_price * (1 + target3/100), stop=slPrice, comment_profit="All Profit at Final Target", comment_loss="Stopped Out")
 
 // --- VISUAL SCENARIO MAPPING ---
 plot(bearLedger, "Bearish Ledger", color=color.new(color.red, 50), style=plot.style_linebr, linewidth=2)
